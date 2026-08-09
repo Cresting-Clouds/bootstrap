@@ -7,11 +7,39 @@ const path = require("node:path");
 const test = require("node:test");
 const {
   GRANT_SCHEMA,
+  cloneCustomer,
   isSafeArchivePath,
   requireArchiveUrl,
   stageEncryptedGrant,
   validateRuntimeResponse,
 } = require("../src/runtime");
+
+test("clones from the surviving workspace parent after deleting the checkout", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "bootstrap-clone-test-"));
+  const workspace = path.join(root, "customer", "repository");
+  await fs.mkdir(workspace, { recursive: true });
+  await fs.writeFile(path.join(workspace, "stale.txt"), "stale\n");
+
+  try {
+    await cloneCustomer({
+      repository: "customer/repository",
+      customerToken: "temporary-customer-token-value",
+    }, workspace, async (command, args, options) => {
+      assert.equal(command, "git");
+      assert.deepEqual(args, [
+        "clone",
+        "--no-tags",
+        "https://github.com/customer/repository.git",
+        workspace,
+      ]);
+      assert.equal(options.cwd, path.dirname(workspace));
+      await fs.access(options.cwd);
+      await assert.rejects(fs.access(workspace), { code: "ENOENT" });
+    });
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 
 test("accepts only GitHub HTTPS archive URLs", () => {
   assert.equal(requireArchiveUrl("https://codeload.github.com/org/repo/tar.gz/abc"), "https://codeload.github.com/org/repo/tar.gz/abc");

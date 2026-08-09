@@ -117,12 +117,14 @@ async function redeemRuntime({ reference, payload, core, fetchImpl = fetch }) {
 
 async function cloneCustomer(runtime, workspace, runCommand = run) {
   const authorization = Buffer.from(`x-access-token:${runtime.customerToken}`, "utf8").toString("base64");
+  const workspaceParent = path.dirname(workspace);
   await fs.rm(workspace, { recursive: true, force: true });
-  await fs.mkdir(path.dirname(workspace), { recursive: true });
+  await fs.mkdir(workspaceParent, { recursive: true });
   await runCommand(
     "git",
     ["clone", "--no-tags", `https://github.com/${runtime.repository}.git`, workspace],
     {
+      cwd: workspaceParent,
       env: {
         ...process.env,
         GIT_CONFIG_COUNT: "1",
@@ -216,6 +218,7 @@ module.exports = {
   GRANT_SCHEMA,
   RUNTIME_SCHEMA,
   cleanupRuntime,
+  cloneCustomer,
   isSafeArchivePath,
   requireArchiveUrl,
   runRuntime,

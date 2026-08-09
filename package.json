@@ -1,0 +1,19 @@
+{
+  "name": "@cresting-clouds/bootstrap",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Verified runtime bootstrap for Cresting Clouds customer workflows",
+  "license": "MIT",
+  "scripts": {
+    "build": "esbuild src/index.js --bundle --platform=node --target=node20 --format=cjs --outfile=dist/index.js --minify",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@actions/artifact": "6.2.1",
+    "@actions/core": "3.0.0",
+    "tar": "^7.4.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.8"
+  }
+}

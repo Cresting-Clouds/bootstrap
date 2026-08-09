@@ -12,8 +12,29 @@ runs:
       with:
         bun-version: 1.3.14
     - name: Bootstrap
+      id: bootstrap
       shell: bash
       env:
         INPUT_REF: ${{ inputs.ref }}
       run: node "$GITHUB_ACTION_PATH/dist/index.js"
 
+    - name: Publish authorization grant
+      if: ${{ steps.bootstrap.outputs.purpose == 'vscode-auth' }}
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ steps.bootstrap.outputs.artifact-name }}
+        path: ${{ steps.bootstrap.outputs.artifact-path }}
+        retention-days: 1
+        if-no-files-found: error
+
+    - name: Remove staged authorization grant
+      if: ${{ always() && steps.bootstrap.outputs.grant-root != '' }}
+      shell: bash
+      env:
+        GRANT_ROOT: ${{ steps.bootstrap.outputs.grant-root }}
+        RUNNER_TEMP_ROOT: ${{ runner.temp }}
+      run: |
+        case "$GRANT_ROOT" in
+          "$RUNNER_TEMP_ROOT"/cresting-clouds-grant-*) rm -rf -- "$GRANT_ROOT" ;;
+          *) echo "::error::Invalid staged grant path"; exit 1 ;;
+        esac

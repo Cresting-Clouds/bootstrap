@@ -76,18 +76,23 @@ function validateRuntimeResponse(value, expectedRepository) {
   };
 }
 
-async function publishEncryptedGrant({ reference, payload, artifactClient, runnerTemp }) {
+async function stageEncryptedGrant({ reference, payload, runnerTemp }) {
   const root = await fs.mkdtemp(path.join(runnerTemp, "cresting-clouds-grant-"));
   const file = path.join(root, "grant.json");
   const document = {
     schema: GRANT_SCHEMA,
     reference,
   };
-  await fs.writeFile(file, `${JSON.stringify(document)}\n`, { encoding: "utf8", mode: 0o600 });
   try {
-    await artifactClient.uploadArtifact(payload.artifact_name, [file], root, { retentionDays: 1 });
-  } finally {
+    await fs.writeFile(file, `${JSON.stringify(document)}\n`, { encoding: "utf8", mode: 0o600 });
+    return {
+      artifactName: payload.artifact_name,
+      file,
+      root,
+    };
+  } catch (error) {
     await fs.rm(root, { recursive: true, force: true });
+    throw error;
   }
 }
 
@@ -212,9 +217,8 @@ module.exports = {
   RUNTIME_SCHEMA,
   cleanupRuntime,
   isSafeArchivePath,
-  publishEncryptedGrant,
   requireArchiveUrl,
   runRuntime,
+  stageEncryptedGrant,
   validateRuntimeResponse,
 };
-

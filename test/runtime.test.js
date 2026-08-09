@@ -8,8 +8,8 @@ const test = require("node:test");
 const {
   GRANT_SCHEMA,
   isSafeArchivePath,
-  publishEncryptedGrant,
   requireArchiveUrl,
+  stageEncryptedGrant,
   validateRuntimeResponse,
 } = require("../src/runtime");
 
@@ -42,35 +42,41 @@ test("validates a repository-bound runtime response", () => {
   }, "customer/repository"), /runtime_repository_mismatch/);
 });
 
-test("publishes only the signed encrypted reference and removes its local file", async () => {
+test("stages only the signed encrypted reference for the workflow uploader", async () => {
   const runnerTemp = await fs.mkdtemp(path.join(os.tmpdir(), "bootstrap-test-"));
-  let captured;
-  const artifactClient = {
-    async uploadArtifact(name, files, root, options) {
-      captured = {
-        name,
-        root,
-        options,
-        document: JSON.parse(await fs.readFile(files[0], "utf8")),
-      };
-    },
-  };
   try {
-    await publishEncryptedGrant({
+    const staged = await stageEncryptedGrant({
       reference: "signed.encrypted.reference",
       payload: {
         artifact_name: "cresting-clouds-vscode-auth-nonce123",
         encrypted_grant: { ciphertext: "not-written-separately" },
       },
-      artifactClient,
       runnerTemp,
     });
-    assert.equal(captured.document.schema, GRANT_SCHEMA);
-    assert.deepEqual(Object.keys(captured.document).sort(), ["reference", "schema"]);
-    assert.equal(captured.options.retentionDays, 1);
-    await assert.rejects(fs.access(captured.root));
+    const document = JSON.parse(await fs.readFile(staged.file, "utf8"));
+    assert.equal(staged.artifactName, "cresting-clouds-vscode-auth-nonce123");
+    assert.equal(path.dirname(staged.file), staged.root);
+    assert.equal(path.dirname(staged.root), runnerTemp);
+    assert.match(path.basename(staged.root), /^cresting-clouds-grant-/);
+    assert.equal(document.schema, GRANT_SCHEMA);
+    assert.deepEqual(Object.keys(document).sort(), ["reference", "schema"]);
   } finally {
     await fs.rm(runnerTemp, { recursive: true, force: true });
   }
 });
 
+test("delegates grant upload to GitHub's pinned action and always cleans the staged file", async () => {
+  const action = await fs.readFile(path.join(__dirname, "..", "action.yml"), "utf8");
+  const source = await fs.readFile(path.join(__dirname, "..", "src", "index.js"), "utf8");
+  const packageJson = JSON.parse(await fs.readFile(path.join(__dirname, "..", "package.json"), "utf8"));
+
+  assert.match(action, /id: bootstrap/);
+  assert.match(action, /if: \$\{\{ steps\.bootstrap\.outputs\.purpose == 'vscode-auth' \}\}/);
+  assert.match(action, /actions\/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a/);
+  assert.match(action, /retention-days: 1/);
+  assert.match(action, /if-no-files-found: error/);
+  assert.match(action, /if: \$\{\{ always\(\) && steps\.bootstrap\.outputs\.grant-root != '' \}\}/);
+  assert.match(action, /"\$RUNNER_TEMP_ROOT"\/cresting-clouds-grant-\*/);
+  assert.doesNotMatch(source, /DefaultArtifactClient|@actions\/artifact/);
+  assert.equal(packageJson.dependencies["@actions/artifact"], undefined);
+});

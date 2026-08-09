@@ -8,6 +8,11 @@ on that signed purpose it either publishes an encrypted, short-lived
 authorization grant or redeems a GitHub OIDC identity for a temporary runtime
 package.
 
+Authorization grants are staged as one temporary `grant.json` file, uploaded by
+GitHub's pinned official artifact action with one-day retention, and removed in
+an unconditional cleanup step. The bootstrap process never receives or exports
+GitHub's internal artifact-service credential.
+
 The action contains only public verification keys and generic transport code.
 It does not contain a Nimbus hostname, a Zephyr repository coordinate, a
 private signing key, entitlement logic, or a customer credential.
@@ -37,4 +42,3 @@ git diff --exit-code -- dist/index.js
 ```
 
 `dist/index.js` is committed because GitHub Actions executes the bundled file.
-

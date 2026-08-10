@@ -176,6 +176,11 @@ async function executeZephyr({ runtime, workspace, zephyrDir, runCommand = run }
   });
 }
 
+async function cleanupWorkspace(workspace) {
+  await fs.rm(workspace, { recursive: true, force: true });
+  await fs.mkdir(workspace, { recursive: true });
+}
+
 async function cleanupRuntime({ workspace, tempRoot }) {
   try {
     process.chdir(process.env.RUNNER_TEMP || os.tmpdir());
@@ -185,13 +190,13 @@ async function cleanupRuntime({ workspace, tempRoot }) {
   const home = os.homedir();
   const paths = [
     tempRoot,
-    workspace,
     path.join(home, ".sf"),
     path.join(home, ".sfdx"),
     path.join(home, ".config", "sf"),
     path.join(home, ".cache", "sf"),
   ];
   await Promise.allSettled(paths.map((target) => fs.rm(target, { recursive: true, force: true })));
+  await cleanupWorkspace(workspace);
 }
 
 async function runRuntime({ reference, payload, core, fetchImpl = fetch, runCommand = run }) {
@@ -218,6 +223,7 @@ module.exports = {
   GRANT_SCHEMA,
   RUNTIME_SCHEMA,
   cleanupRuntime,
+  cleanupWorkspace,
   cloneCustomer,
   isSafeArchivePath,
   requireArchiveUrl,

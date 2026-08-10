@@ -7,12 +7,28 @@ const path = require("node:path");
 const test = require("node:test");
 const {
   GRANT_SCHEMA,
+  cleanupWorkspace,
   cloneCustomer,
   isSafeArchivePath,
   requireArchiveUrl,
   stageEncryptedGrant,
   validateRuntimeResponse,
 } = require("../src/runtime");
+
+test("cleans workspace contents and recreates the directory for post actions", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "bootstrap-cleanup-test-"));
+  const workspace = path.join(root, "customer", "repository");
+  await fs.mkdir(path.join(workspace, "nested"), { recursive: true });
+  await fs.writeFile(path.join(workspace, "runtime.txt"), "runtime\n");
+  await fs.writeFile(path.join(workspace, "nested", "customer.txt"), "customer\n");
+
+  try {
+    await cleanupWorkspace(workspace);
+    assert.deepEqual(await fs.readdir(workspace), []);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 
 test("clones from the surviving workspace parent after deleting the checkout", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "bootstrap-clone-test-"));

@@ -19,15 +19,22 @@ private signing key, entitlement logic, or a customer credential.
 
 ## Usage
 
-Pin releases by full commit SHA:
+Use the protected `main` branch as the stable customer reference:
 
 ```yaml
-- uses: Cresting-Clouds/bootstrap@<full-commit-sha>
+- uses: Cresting-Clouds/bootstrap@main
   with:
     ref: ${{ inputs.ref }}
   env:
     ALL_SECRETS_JSON: ${{ toJSON(secrets) }}
 ```
+
+Customer workflows intentionally consume reviewed Bootstrap changes without a
+workflow-file update. `main` is therefore a live customer execution boundary.
+Before this reference is enabled, the branch must be protected; every change
+must require review and passing tests; and force-pushes must be disabled.
+Alternate branches, tags, and commit references are not part of the supported
+customer contract.
 
 Runtime workflows must grant `id-token: write`. Customer workflow installation
 and trust registration are managed by Cresting Clouds.

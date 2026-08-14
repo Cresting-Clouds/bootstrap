@@ -145,6 +145,7 @@ async function redeemRuntime({
     "content-type": "application/json",
   };
   const redemptionUrl = new URL(payload.redeem_url);
+  const callbackHost = redemptionUrl.origin;
   if (protectionBypass) {
     headers["x-vercel-protection-bypass"] = protectionBypass;
     redemptionUrl.searchParams.set("x-vercel-protection-bypass", protectionBypass);
@@ -160,7 +161,11 @@ async function redeemRuntime({
   if (!response.ok) {
     throw new Error(`runtime_redemption_failed_${response.status}`);
   }
-  return validateRuntimeResponse(await response.json(), payload.repository);
+  return {
+    ...validateRuntimeResponse(await response.json(), payload.repository),
+    callbackHost,
+    callbackSecret: protectionBypass,
+  };
 }
 
 async function cloneCustomer(runtime, workspace, runCommand = run) {
@@ -219,6 +224,8 @@ async function executeZephyr({ runtime, workspace, zephyrDir, runCommand = run }
     cwd: workspace,
     env: {
       ...process.env,
+      CRESTING_CLOUDS_RUNTIME_HOST: runtime.callbackHost,
+      CRESTING_CLOUDS_RUNTIME_SECRET: runtime.callbackSecret || "",
       HEARTBEAT_ID: runtime.heartbeatId,
     },
   });
@@ -273,6 +280,7 @@ module.exports = {
   cleanupRuntime,
   cleanupWorkspace,
   cloneCustomer,
+  executeZephyr,
   isSafeArchivePath,
   readDeploymentProtectionBypass,
   redeemRuntime,

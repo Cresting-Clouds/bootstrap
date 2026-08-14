@@ -47,6 +47,11 @@ protection, the customer repository can retain the existing
 forwards it only on the Nimbus-signed runtime redemption request. The value is
 never written to disk or included in action outputs.
 
+After redemption, Bootstrap passes the signed callback origin and masked bypass
+to the downloaded runtime process. This keeps environment routing out of the
+customer workflow while ensuring every Zephyr callback returns to the Nimbus
+deployment that issued the one-time reference.
+
 ## Development
 
 ```shell

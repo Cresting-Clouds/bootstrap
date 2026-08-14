@@ -9,6 +9,7 @@ const {
   GRANT_SCHEMA,
   cleanupWorkspace,
   cloneCustomer,
+  executeZephyr,
   isSafeArchivePath,
   readDeploymentProtectionBypass,
   redeemRuntime,
@@ -163,7 +164,7 @@ test("masks and forwards the customer deployment protection bypass", async () =>
 test("normalizes the established query-fragment bypass secret", async () => {
   const masked = [];
   let request;
-  await redeemRuntime({
+  const runtime = await redeemRuntime({
     reference: "signed.runtime.reference",
     payload: runtimePayload(),
     core: {
@@ -185,6 +186,35 @@ test("normalizes the established query-fragment bypass secret", async () => {
   );
   assert.equal(request.options.headers["x-vercel-protection-bypass"], "customer/bypass+secret");
   assert.deepEqual(masked, ["customer/bypass+secret", "github-oidc-token"]);
+  assert.equal(runtime.callbackHost, "https://nimbus.example.invalid");
+  assert.equal(runtime.callbackSecret, "customer/bypass+secret");
+});
+
+test("passes only the signed callback context into the Zephyr process", async () => {
+  const commands = [];
+  await executeZephyr({
+    runtime: {
+      heartbeatId: "heartbeat-123",
+      callbackHost: "https://nimbus.example.invalid",
+      callbackSecret: "customer-bypass-secret",
+    },
+    workspace: "/tmp/customer-workspace",
+    zephyrDir: "/tmp/zephyr-runtime",
+    runCommand: async (command, args, options) => commands.push({ command, args, options }),
+  });
+
+  assert.equal(commands.length, 2);
+  assert.deepEqual(commands[1].args, ["/tmp/zephyr-runtime/run.js"]);
+  assert.equal(commands[1].options.cwd, "/tmp/customer-workspace");
+  assert.equal(
+    commands[1].options.env.CRESTING_CLOUDS_RUNTIME_HOST,
+    "https://nimbus.example.invalid",
+  );
+  assert.equal(
+    commands[1].options.env.CRESTING_CLOUDS_RUNTIME_SECRET,
+    "customer-bypass-secret",
+  );
+  assert.equal(commands[1].options.env.HEARTBEAT_ID, "heartbeat-123");
 });
 
 test("fails closed when the inherited secret bundle is malformed", () => {

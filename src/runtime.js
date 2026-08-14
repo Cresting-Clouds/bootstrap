@@ -15,6 +15,7 @@ const GITHUB_ARCHIVE_HOSTS = new Set([
 ]);
 const SAFE_REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const SAFE_SHA = /^[a-f0-9]{40}$/;
+const VERCEL_PROTECTION_BYPASS_SECRET = "NIMBUS_VERCEL_BYPASS";
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -96,16 +97,50 @@ async function stageEncryptedGrant({ reference, payload, runnerTemp }) {
   }
 }
 
-async function redeemRuntime({ reference, payload, core, fetchImpl = fetch }) {
+function readDeploymentProtectionBypass(secretsJson) {
+  if (!secretsJson) return "";
+
+  let secrets;
+  try {
+    secrets = JSON.parse(secretsJson);
+  } catch {
+    throw new Error("invalid_all_secrets_json");
+  }
+
+  if (!secrets || typeof secrets !== "object" || Array.isArray(secrets)) {
+    throw new Error("invalid_all_secrets_json");
+  }
+
+  const bypass = secrets[VERCEL_PROTECTION_BYPASS_SECRET];
+  if (bypass === undefined || bypass === null || bypass === "") return "";
+  if (typeof bypass !== "string") throw new Error("invalid_deployment_protection_bypass");
+  return bypass;
+}
+
+async function redeemRuntime({
+  reference,
+  payload,
+  core,
+  fetchImpl = fetch,
+  secretsJson = process.env.ALL_SECRETS_JSON,
+}) {
+  const protectionBypass = readDeploymentProtectionBypass(secretsJson);
+  if (protectionBypass) core.setSecret(protectionBypass);
+
   const oidcToken = await core.getIDToken(payload.oidc_audience);
   core.setSecret(oidcToken);
+  const headers = {
+    authorization: `Bearer ${oidcToken}`,
+    "content-type": "application/json",
+  };
+  if (protectionBypass) {
+    headers["x-vercel-protection-bypass"] = protectionBypass;
+  }
+
   const response = await fetchImpl(payload.redeem_url, {
     method: "POST",
     redirect: "error",
-    headers: {
-      authorization: `Bearer ${oidcToken}`,
-      "content-type": "application/json",
-    },
+    headers,
     body: JSON.stringify({ reference }),
     signal: AbortSignal.timeout(30_000),
   });
@@ -226,6 +261,8 @@ module.exports = {
   cleanupWorkspace,
   cloneCustomer,
   isSafeArchivePath,
+  readDeploymentProtectionBypass,
+  redeemRuntime,
   requireArchiveUrl,
   runRuntime,
   stageEncryptedGrant,

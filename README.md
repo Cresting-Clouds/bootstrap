@@ -39,6 +39,13 @@ customer contract.
 Runtime workflows must grant `id-token: write`. Customer workflow installation
 and trust registration are managed by Cresting Clouds.
 
+When Nimbus development or preview deployments use Vercel deployment
+protection, the customer repository can retain the existing
+`NIMBUS_VERCEL_BYPASS` secret. Bootstrap reads only that field from
+`ALL_SECRETS_JSON`, masks it before use, and forwards it only on the
+Nimbus-signed runtime redemption request. The value is never written to disk or
+included in action outputs.
+
 ## Development
 
 ```shell

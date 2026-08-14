@@ -10,10 +10,36 @@ const {
   cleanupWorkspace,
   cloneCustomer,
   isSafeArchivePath,
+  readDeploymentProtectionBypass,
+  redeemRuntime,
   requireArchiveUrl,
   stageEncryptedGrant,
   validateRuntimeResponse,
 } = require("../src/runtime");
+
+function runtimePayload() {
+  return {
+    repository: "customer/repository",
+    oidc_audience: "cresting-clouds-runtime",
+    redeem_url: "https://nimbus.example.invalid/api/pulsecheck",
+  };
+}
+
+function runtimeResponse() {
+  return {
+    ok: true,
+    async json() {
+      return {
+        schema: "cresting-clouds-runtime/v1",
+        repository: "customer/repository",
+        heartbeat_id: "heartbeat-123",
+        customer_token: "temporary-customer-token-value",
+        archive_url: "https://codeload.github.com/org/repo/tar.gz/abc",
+        zephyr_sha: "a".repeat(40),
+      };
+    },
+  };
+}
 
 test("cleans workspace contents and recreates the directory for post actions", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "bootstrap-cleanup-test-"));
@@ -84,6 +110,59 @@ test("validates a repository-bound runtime response", () => {
     schema: "cresting-clouds-runtime/v1",
     repository: "other/repository",
   }, "customer/repository"), /runtime_repository_mismatch/);
+});
+
+test("omits the deployment protection header when the customer secret is absent", async () => {
+  const masked = [];
+  let request;
+  await redeemRuntime({
+    reference: "signed.runtime.reference",
+    payload: runtimePayload(),
+    core: {
+      getIDToken: async () => "github-oidc-token",
+      setSecret: value => masked.push(value),
+    },
+    secretsJson: JSON.stringify({ OTHER_SECRET: "ignored" }),
+    fetchImpl: async (url, options) => {
+      request = { url, options };
+      return runtimeResponse();
+    },
+  });
+
+  assert.equal(request.url, "https://nimbus.example.invalid/api/pulsecheck");
+  assert.equal(request.options.headers.authorization, "Bearer github-oidc-token");
+  assert.equal(request.options.headers["x-vercel-protection-bypass"], undefined);
+  assert.deepEqual(masked, ["github-oidc-token"]);
+});
+
+test("masks and forwards the customer deployment protection bypass", async () => {
+  const masked = [];
+  let request;
+  await redeemRuntime({
+    reference: "signed.runtime.reference",
+    payload: runtimePayload(),
+    core: {
+      getIDToken: async () => "github-oidc-token",
+      setSecret: value => masked.push(value),
+    },
+    secretsJson: JSON.stringify({ NIMBUS_VERCEL_BYPASS: "customer-bypass-secret" }),
+    fetchImpl: async (url, options) => {
+      request = { url, options };
+      return runtimeResponse();
+    },
+  });
+
+  assert.equal(request.url, "https://nimbus.example.invalid/api/pulsecheck");
+  assert.equal(request.options.headers["x-vercel-protection-bypass"], "customer-bypass-secret");
+  assert.deepEqual(masked, ["customer-bypass-secret", "github-oidc-token"]);
+});
+
+test("fails closed when the inherited secret bundle is malformed", () => {
+  assert.throws(() => readDeploymentProtectionBypass("{"), /invalid_all_secrets_json/);
+  assert.throws(
+    () => readDeploymentProtectionBypass(JSON.stringify({ NIMBUS_VERCEL_BYPASS: 123 })),
+    /invalid_deployment_protection_bypass/,
+  );
 });
 
 test("stages only the signed encrypted reference for the workflow uploader", async () => {

@@ -113,8 +113,19 @@ function readDeploymentProtectionBypass(secretsJson) {
 
   const bypass = secrets[VERCEL_PROTECTION_BYPASS_SECRET];
   if (bypass === undefined || bypass === null || bypass === "") return "";
-  if (typeof bypass !== "string") throw new Error("invalid_deployment_protection_bypass");
-  return bypass;
+  if (typeof bypass !== "string" || /[\r\n]/.test(bypass)) {
+    throw new Error("invalid_deployment_protection_bypass");
+  }
+
+  const query = bypass.replace(/^[?&]/, "");
+  if (!query.startsWith("x-vercel-protection-bypass=")) return bypass;
+
+  const params = new URLSearchParams(query);
+  const values = params.getAll("x-vercel-protection-bypass");
+  if ([...params].length !== 1 || values.length !== 1 || !values[0]) {
+    throw new Error("invalid_deployment_protection_bypass");
+  }
+  return values[0];
 }
 
 async function redeemRuntime({
@@ -133,11 +144,13 @@ async function redeemRuntime({
     authorization: `Bearer ${oidcToken}`,
     "content-type": "application/json",
   };
+  const redemptionUrl = new URL(payload.redeem_url);
   if (protectionBypass) {
     headers["x-vercel-protection-bypass"] = protectionBypass;
+    redemptionUrl.searchParams.set("x-vercel-protection-bypass", protectionBypass);
   }
 
-  const response = await fetchImpl(payload.redeem_url, {
+  const response = await fetchImpl(redemptionUrl, {
     method: "POST",
     redirect: "error",
     headers,

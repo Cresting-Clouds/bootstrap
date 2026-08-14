@@ -129,7 +129,7 @@ test("omits the deployment protection header when the customer secret is absent"
     },
   });
 
-  assert.equal(request.url, "https://nimbus.example.invalid/api/pulsecheck");
+  assert.equal(request.url.toString(), "https://nimbus.example.invalid/api/pulsecheck");
   assert.equal(request.options.headers.authorization, "Bearer github-oidc-token");
   assert.equal(request.options.headers["x-vercel-protection-bypass"], undefined);
   assert.deepEqual(masked, ["github-oidc-token"]);
@@ -152,15 +152,57 @@ test("masks and forwards the customer deployment protection bypass", async () =>
     },
   });
 
-  assert.equal(request.url, "https://nimbus.example.invalid/api/pulsecheck");
+  assert.equal(
+    request.url.toString(),
+    "https://nimbus.example.invalid/api/pulsecheck?x-vercel-protection-bypass=customer-bypass-secret",
+  );
   assert.equal(request.options.headers["x-vercel-protection-bypass"], "customer-bypass-secret");
   assert.deepEqual(masked, ["customer-bypass-secret", "github-oidc-token"]);
+});
+
+test("normalizes the established query-fragment bypass secret", async () => {
+  const masked = [];
+  let request;
+  await redeemRuntime({
+    reference: "signed.runtime.reference",
+    payload: runtimePayload(),
+    core: {
+      getIDToken: async () => "github-oidc-token",
+      setSecret: value => masked.push(value),
+    },
+    secretsJson: JSON.stringify({
+      NIMBUS_VERCEL_BYPASS: "?x-vercel-protection-bypass=customer%2Fbypass%2Bsecret",
+    }),
+    fetchImpl: async (url, options) => {
+      request = { url, options };
+      return runtimeResponse();
+    },
+  });
+
+  assert.equal(
+    request.url.toString(),
+    "https://nimbus.example.invalid/api/pulsecheck?x-vercel-protection-bypass=customer%2Fbypass%2Bsecret",
+  );
+  assert.equal(request.options.headers["x-vercel-protection-bypass"], "customer/bypass+secret");
+  assert.deepEqual(masked, ["customer/bypass+secret", "github-oidc-token"]);
 });
 
 test("fails closed when the inherited secret bundle is malformed", () => {
   assert.throws(() => readDeploymentProtectionBypass("{"), /invalid_all_secrets_json/);
   assert.throws(
     () => readDeploymentProtectionBypass(JSON.stringify({ NIMBUS_VERCEL_BYPASS: 123 })),
+    /invalid_deployment_protection_bypass/,
+  );
+  assert.throws(
+    () => readDeploymentProtectionBypass(JSON.stringify({
+      NIMBUS_VERCEL_BYPASS: "x-vercel-protection-bypass=one&unexpected=two",
+    })),
+    /invalid_deployment_protection_bypass/,
+  );
+  assert.throws(
+    () => readDeploymentProtectionBypass(JSON.stringify({
+      NIMBUS_VERCEL_BYPASS: "line-one\nline-two",
+    })),
     /invalid_deployment_protection_bypass/,
   );
 });

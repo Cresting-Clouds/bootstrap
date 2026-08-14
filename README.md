@@ -42,9 +42,10 @@ and trust registration are managed by Cresting Clouds.
 When Nimbus development or preview deployments use Vercel deployment
 protection, the customer repository can retain the existing
 `NIMBUS_VERCEL_BYPASS` secret. Bootstrap reads only that field from
-`ALL_SECRETS_JSON`, masks it before use, and forwards it only on the
-Nimbus-signed runtime redemption request. The value is never written to disk or
-included in action outputs.
+`ALL_SECRETS_JSON`, accepts either the raw value or the established
+`x-vercel-protection-bypass=...` query-fragment form, masks it before use, and
+forwards it only on the Nimbus-signed runtime redemption request. The value is
+never written to disk or included in action outputs.
 
 ## Development
 
